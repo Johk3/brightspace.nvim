@@ -75,16 +75,27 @@ local function ensure_jar(jar)
   vim.uv.fs_chmod(jar, 384)
 end
 
-local function curl_request(req, cb)
+local curl_request
+function curl_request(req, cb)
+  if vim.in_fast_event() then
+    return vim.schedule(function()
+      curl_request(req, cb)
+    end)
+  end
   local jar = require("brightspace.paths").cookie_jar()
   ensure_jar(jar)
   local hdr_file = vim.fn.tempname()
   local cmd = {
-    "curl", "-sS", "--compressed",
+    "curl", "-sS", "--compressed", "--connect-timeout", "15",
     "-b", jar, "-c", jar, "-D", hdr_file,
     "-w", "\n%{url_effective}",
-    "-X", req.method or "GET",
   }
+  -- GET is curl's default and a POST body implies POST; forcing -X would be
+  -- kept across redirects and break POST->302->GET.
+  local method = req.method or "GET"
+  if method ~= "GET" and not (method == "POST" and req.form) then
+    vim.list_extend(cmd, { "-X", method })
+  end
   if req.follow then
     cmd[#cmd + 1] = "-L"
   end
@@ -104,7 +115,7 @@ local function curl_request(req, cb)
   end
   vim.list_extend(cmd, { "--", req.url })
 
-  vim.system(cmd, { stdin = stdin, text = false }, function(out)
+  local ok, spawn_err = pcall(vim.system, cmd, { stdin = stdin, text = false }, function(out)
     local raw = read_file(hdr_file)
     vim.uv.fs_unlink(hdr_file)
     vim.uv.fs_chmod(jar, 384)
@@ -121,12 +132,17 @@ local function curl_request(req, cb)
     local status, headers, location = M._parse_headers(raw)
     cb(nil, { status = status, headers = headers, location = location, body = body, url = url })
   end)
+  if not ok then
+    vim.uv.fs_unlink(hdr_file)
+    cb("failed to run curl: " .. tostring(spawn_err), nil)
+  end
 end
 
 --- Perform an HTTP request. Default transport is curl with a shared cookie jar.
 --- Form bodies go over stdin so secrets never reach argv.
 --- With the curl transport `cb` runs in a luv fast context (no vim.fn / vim.api);
---- callers must vim.schedule if they need those.
+--- callers must vim.schedule if they need those. request() itself may be called
+--- from any context, including from another request's callback.
 ---@param req {method:string|nil, url:string, form:table|nil, follow:boolean|nil, output:string|nil, headers:table|nil}
 ---@param cb fun(err:string|nil, res:table|nil)
 function M.request(req, cb)

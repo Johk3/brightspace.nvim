@@ -67,7 +67,7 @@ function M.get(cb)
   local missing = false
   each_field(function(field, done)
     run({ "secret-tool", "lookup", "service", SERVICE, "field", field }, nil, function(code, stdout, stderr)
-      if code == 1 then
+      if code == 1 and (stderr or "") == "" then
         missing = true
         return done(nil)
       elseif code ~= 0 then
@@ -92,7 +92,7 @@ function M.clear(cb)
   each_field(function(field, done)
     run({ "secret-tool", "clear", "service", SERVICE, "field", field }, nil, function(code, _, stderr)
       -- exit 1 means nothing to clear
-      done((code ~= 0 and code ~= 1) and ("secret-tool clear failed: " .. (stderr or "")) or nil)
+      done((code ~= 0 and not (code == 1 and (stderr or "") == "")) and ("secret-tool clear failed: " .. (stderr or "")) or nil)
     end)
   end, cb)
 end

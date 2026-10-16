@@ -80,3 +80,24 @@ describe("keyring", function()
     assert.equals("clear", calls[1].cmd[2])
   end)
 end)
+
+describe("keyring exit 1 with stderr", function()
+  after_each(function()
+    keyring.set_runner(nil)
+  end)
+  it("is an error when stderr is non-empty", function()
+    keyring.set_runner(function(_, _, cb)
+      cb(1, "", "dbus failure")
+    end)
+    local err
+    keyring.get(function(e)
+      err = e
+    end)
+    assert.is_string(err)
+    local cerr
+    keyring.clear(function(e)
+      cerr = e
+    end)
+    assert.is_string(cerr)
+  end)
+end)

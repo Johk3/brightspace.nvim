@@ -97,3 +97,118 @@ describe("http.request (curl)", function()
     assert.is_nil(res)
   end)
 end)
+
+describe("http.request against loopback server", function()
+  local server, port, log, saved, root
+
+  local function respond(sock, status, extra, body)
+    sock:write(("HTTP/1.1 %s\r\n%sContent-Length: %d\r\nConnection: close\r\n\r\n%s"):format(status, extra, #body, body))
+    sock:shutdown(function()
+      sock:close()
+    end)
+  end
+
+  before_each(function()
+    saved = vim.env.BRIGHTSPACE_STATE_DIR
+    root = vim.fn.tempname()
+    vim.env.BRIGHTSPACE_STATE_DIR = root
+    log = {}
+    server = vim.uv.new_tcp()
+    server:bind("127.0.0.1", 0)
+    port = server:getsockname().port
+    server:listen(8, function()
+      local sock = vim.uv.new_tcp()
+      server:accept(sock)
+      local buf = ""
+      sock:read_start(function(err, chunk)
+        if err or not chunk then
+          return
+        end
+        buf = buf .. chunk
+        local head, rest = buf:match("^(.-)\r\n\r\n(.*)$")
+        if not head then
+          return
+        end
+        local len = tonumber(head:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")) or 0
+        if #rest < len then
+          return
+        end
+        sock:read_stop()
+        local method, path = head:match("^(%S+)%s+(%S+)")
+        table.insert(log, { method = method, path = path, body = rest })
+        if path == "/get" then
+          respond(sock, "200 OK", "X-Test: yes\r\n", "hello")
+        elseif path == "/post" then
+          respond(sock, "200 OK", "", "posted")
+        elseif path == "/redir" then
+          respond(sock, "302 Found", "Location: /dest\r\n", "")
+        else
+          respond(sock, "200 OK", "", "dest")
+        end
+      end)
+    end)
+  end)
+
+  after_each(function()
+    server:close()
+    vim.env.BRIGHTSPACE_STATE_DIR = saved
+    vim.fn.delete(root, "rf")
+  end)
+
+  local function url(p)
+    return ("http://127.0.0.1:%d%s"):format(port, p)
+  end
+
+  local function call(req)
+    local done, err, res
+    http.request(req, function(e, r)
+      done, err, res = true, e, r
+    end)
+    vim.wait(10000, function()
+      return done
+    end)
+    return err, res
+  end
+
+  it("GET parses status, headers and body", function()
+    local err, res = call({ url = url("/get") })
+    assert.is_nil(err)
+    assert.equals(200, res.status)
+    assert.equals("hello", res.body)
+    assert.equals("yes", res.headers["x-test"])
+  end)
+
+  it("POST sends the form body", function()
+    local err, res = call({ method = "POST", url = url("/post"), form = { b = "x y", a = "1" } })
+    assert.is_nil(err)
+    assert.equals("posted", res.body)
+    assert.equals("POST", log[1].method)
+    assert.equals("a=1&b=x+y", log[1].body)
+  end)
+
+  it("POST with follow turns the redirect into a GET", function()
+    local err, res = call({ method = "POST", url = url("/redir"), form = { a = "1" }, follow = true })
+    assert.is_nil(err)
+    assert.equals(200, res.status)
+    assert.equals("dest", res.body)
+    assert.equals("GET", log[#log].method)
+    assert.equals("/dest", log[#log].path)
+    assert.equals(url("/dest"), res.url)
+  end)
+
+  it("allows chaining a request from inside a callback", function()
+    local done, second
+    http.request({ url = url("/get") }, function()
+      http.request({ url = url("/dest") }, function(e, r)
+        second = { e, r }
+        done = true
+      end)
+    end)
+    vim.wait(10000, function()
+      return done
+    end)
+    assert.is_true(done)
+    assert.is_nil(second[1])
+    assert.equals("dest", second[2].body)
+  end)
+end)
