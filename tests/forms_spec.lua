@@ -40,6 +40,29 @@ describe("forms.parse", function()
   end)
 end)
 
+describe("forms.parse robustness", function()
+  it("keeps document order with a bare form first", function()
+    local list = forms.parse([[<form><input name="a" value="1"></form><form id="b" action="/2"></form>]], "https://h.example/")
+    assert.equals(2, #list)
+    assert.equals("1", list[1].inputs.a)
+    assert.equals("b", list[2].id)
+  end)
+
+  it("works in a fast event context", function()
+    local done, result, err = false, nil, nil
+    local timer = vim.uv.new_timer()
+    timer:start(0, 0, function()
+      local ok, r = pcall(forms.parse, [[<form action="/a&#47;b&#x1F600;"></form>]], "https://h.example/")
+      if ok then result = r else err = r end
+      done = true
+      timer:close()
+    end)
+    assert.is_true(vim.wait(2000, function() return done end))
+    assert.is_nil(err)
+    assert.equals("https://h.example/a/b\xF0\x9F\x98\x80", result[1].action)
+  end)
+end)
+
 describe("forms.find", function()
   it("finds by predicate", function()
     local list = forms.parse([[<form id="a" action="/1"></form><form id="b" action="/2"><input name="z" value="1"></form>]], "https://h.example/")

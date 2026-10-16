@@ -2,14 +2,32 @@ local M = {}
 
 local named = { amp = "&", quot = '"', apos = "'", lt = "<", gt = ">", nbsp = " " }
 
+local function utf8_char(n)
+  if n < 0x80 then
+    return string.char(n)
+  elseif n < 0x800 then
+    return string.char(0xC0 + math.floor(n / 0x40), 0x80 + n % 0x40)
+  elseif n < 0x10000 then
+    return string.char(0xE0 + math.floor(n / 0x1000), 0x80 + math.floor(n / 0x40) % 0x40, 0x80 + n % 0x40)
+  elseif n <= 0x10FFFF then
+    return string.char(
+      0xF0 + math.floor(n / 0x40000),
+      0x80 + math.floor(n / 0x1000) % 0x40,
+      0x80 + math.floor(n / 0x40) % 0x40,
+      0x80 + n % 0x40
+    )
+  end
+  return nil
+end
+
 local function decode(s)
   return (s:gsub("&(#?[%w]+);", function(e)
     if e:sub(1, 2):lower() == "#x" then
       local n = tonumber(e:sub(3), 16)
-      return n and vim.fn.nr2char(n) or nil
+      return n and utf8_char(n) or nil
     elseif e:sub(1, 1) == "#" then
       local n = tonumber(e:sub(2))
-      return n and vim.fn.nr2char(n) or nil
+      return n and utf8_char(n) or nil
     end
     return named[e]
   end))
@@ -53,16 +71,14 @@ end
 function M.parse(html, base_url)
   local forms = {}
   local pos = 1
+  local lower = html:lower()
   while true do
-    local s, e, open = html:find("<[Ff][Oo][Rr][Mm](%s[^>]*)>", pos)
+    local s, e = html:find("<[Ff][Oo][Rr][Mm]%f[^%w][^>]*>", pos)
     if not s then
-      s, e, open = html:find("<[Ff][Oo][Rr][Mm]()>", pos)
-      if not s then
-        break
-      end
-      open = ""
+      break
     end
-    local cs, ce = html:lower():find("</form%s*>", e + 1)
+    local open = html:sub(s + 5, e - 1)
+    local cs, ce = lower:find("</form%s*>", e + 1)
     local body = html:sub(e + 1, (cs or #html + 1) - 1)
     local a = attrs(open)
     local form = {
