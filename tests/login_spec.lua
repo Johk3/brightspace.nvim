@@ -98,6 +98,69 @@ describe("login.run", function()
     assert.equals(1, count("GET " .. WHOAMI))
   end)
 
+  it("relays saml fields to each form action", function()
+    use({
+      ["GET " .. BS .. "/d2l/login"] = page(IDP, "idp_login"),
+      ["POST " .. IDP] = page(IDP, "saml_to_surfconext"),
+      ["POST " .. ENGINE] = page(ENGINE, "saml_to_brightspace"),
+      ["POST " .. SAML_LOGIN] = page(BS .. "/d2l/home", "home"),
+      ["GET " .. WHOAMI] = { status = 200, headers = {}, body = "{}", url = WHOAMI },
+    })
+    assert.is_nil((run()))
+    for _, c in ipairs(calls) do
+      if c.key == "POST " .. ENGINE then
+        assert.equals("ZmFrZS1yZXNwb25zZS0x", c.req.form.SAMLResponse)
+        assert.equals("fake-relay", c.req.form.RelayState)
+      elseif c.key == "POST " .. SAML_LOGIN then
+        assert.equals(SAML_LOGIN, c.req.url)
+        assert.equals("ZmFrZS1yZXNwb25zZS0y", c.req.form.SAMLResponse)
+        assert.equals("fake-relay", c.req.form.RelayState)
+      end
+    end
+  end)
+
+  it("submits GET forms via the query string", function()
+    local html = '<form method="get" action="https://login.tudelft.nl/go?a=1"><input name="SAMLRequest" value="x y"></form>'
+    use({
+      ["GET " .. BS .. "/d2l/login"] = { status = 200, headers = {}, body = html, url = IDP },
+      ["GET https://login.tudelft.nl/go"] = page(BS .. "/d2l/home", "home"),
+      ["GET " .. WHOAMI] = { status = 200, headers = {}, body = "{}", url = WHOAMI },
+    })
+    assert.is_nil((run()))
+    assert.equals("https://login.tudelft.nl/go?a=1&SAMLRequest=x+y", calls[2].req.url)
+    assert.is_nil(calls[2].req.form)
+  end)
+
+  it("reports a transport error on the first request once", function()
+    http.set_transport(function(req, cb)
+      cb("could not resolve host", nil)
+    end)
+    local err, called = run()
+    assert.equals("unexpected: could not resolve host", err)
+    assert.equals(1, called)
+  end)
+
+  it("is callable from a fast context", function()
+    use({
+      ["GET " .. BS .. "/d2l/login"] = page(BS .. "/d2l/home", "home"),
+      ["GET " .. WHOAMI] = { status = 200, headers = {}, body = "{}", url = WHOAMI },
+    })
+    local done, err, ok = false, nil, nil
+    local timer = vim.uv.new_timer()
+    timer:start(0, 0, function()
+      ok = pcall(login.run, { netid = "jdoe", password = "hunter2" }, function(e)
+        err, done = e, true
+      end)
+      timer:close()
+    end)
+    vim.wait(2000, function()
+      return done
+    end)
+    assert.is_true(ok)
+    assert.is_true(done)
+    assert.is_nil(err)
+  end)
+
   it("rejects bad credentials", function()
     use({
       ["GET " .. BS .. "/d2l/login"] = page(IDP, "idp_login"),

@@ -31,6 +31,11 @@ end
 ---@param creds {netid:string, password:string}
 ---@param cb fun(err:string|nil)
 function M.run(creds, cb)
+  if vim.in_fast_event() then
+    return vim.schedule(function()
+      M.run(creds, cb)
+    end)
+  end
   local base = require("brightspace.config").get().base_url:gsub("/+$", "")
   local bs_host = host_of(base)
   local jar = require("brightspace.paths").cookie_jar()
@@ -89,6 +94,19 @@ function M.run(creds, cb)
     end)
   end
 
+  -- Honor the form method: GET puts the inputs in the query string.
+  local function submit(f, inputs, handler)
+    if f.method == "GET" then
+      local q = http.encode_form(inputs)
+      local url = f.action:gsub("#.*$", "")
+      if q ~= "" then
+        url = url .. (url:find("?", 1, true) and "&" or "?") .. q
+      end
+      return send({ method = "GET", url = url }, handler)
+    end
+    send({ method = "POST", url = f.action, form = inputs }, handler)
+  end
+
   local step
   function step(res)
     local list = forms.parse(res.body or "", res.url)
@@ -103,13 +121,13 @@ function M.run(creds, cb)
       local form = copy(pw.inputs)
       form.username = creds.netid
       form.password = creds.password
-      return send({ method = "POST", url = pw.action, form = form }, step)
+      return submit(pw, form, step)
     end
     local saml = forms.find(list, function(f)
       return f.inputs.SAMLResponse ~= nil or f.inputs.SAMLRequest ~= nil
     end)
     if saml then
-      return send({ method = "POST", url = saml.action, form = copy(saml.inputs) }, step)
+      return submit(saml, copy(saml.inputs), step)
     end
     if host_of(res.url) == bs_host and res.status == 200 then
       return check_whoami()
