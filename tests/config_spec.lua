@@ -1,0 +1,22 @@
+local config = require("brightspace.config")
+
+describe("config", function()
+  before_each(function() config.setup() end)
+
+  it("has defaults", function()
+    local c = config.get()
+    assert.equals("https://brightspace.tudelft.nl", c.base_url)
+    assert.equals("xdg-open", c.viewer)
+    assert.equals("<leader>bs", c.keymap)
+    assert.equals(300, c.cache_ttl)
+    assert.equals(600, c.keepalive)
+    assert.equals(30, c.deadline_days)
+  end)
+
+  it("overrides only given keys", function()
+    config.setup({ viewer = "evince" })
+    local c = config.get()
+    assert.equals("evince", c.viewer)
+    assert.equals(300, c.cache_ttl)
+  end)
+end)
