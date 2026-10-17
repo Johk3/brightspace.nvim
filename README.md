@@ -128,7 +128,7 @@ are installed in the current notebook environment.
 | `:w` | Save the notebook and current kernel outputs |
 
 After choosing a kernel, wait for Molten’s “ready” message before running a cell.
-Text output appears below the cell; `<leader>no` opens it in a window. Plot cells
+Cell separators use a clear highlight, the active cell gets a contrasting background, and each cell’s output uses a separate color. Text output appears below its cell; `<leader>no` opens it in a window. Plot cells
 produce notebook images with the configured inline Matplotlib backend; `<leader>np`
 opens the image in your desktop viewer. Restart the kernel after installing packages. Additional Jupyter kernels can be registered
 for course environments. Use the appropriate working directory and keep any

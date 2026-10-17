@@ -69,7 +69,24 @@ return {
   {
     'GCBallesteros/NotebookNavigator.nvim',
     ft = 'python',
-    opts = { repl_provider = 'molten', syntax_highlight = true },
+    opts = {
+      repl_provider = 'molten',
+      syntax_highlight = true,
+      cell_highlight_group = 'BrightspaceNotebookCell',
+    },
+    config = function(_, opts)
+      require('notebook-navigator').setup(opts)
+      local function highlights()
+        vim.api.nvim_set_hl(0, 'BrightspaceNotebookCell', { link = 'DiffAdd', bold = true })
+        vim.api.nvim_set_hl(0, 'MoltenCell', { link = 'Visual' })
+        vim.api.nvim_set_hl(0, 'MoltenVirtualText', { link = 'DiagnosticInfo' })
+        vim.api.nvim_set_hl(0, 'MoltenOutputBorderSuccess', { link = 'DiagnosticOk' })
+        vim.api.nvim_set_hl(0, 'MoltenOutputBorderFail', { link = 'DiagnosticError' })
+      end
+      highlights()
+      local group = vim.api.nvim_create_augroup('BrightspaceNotebookHighlights', { clear = true })
+      vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = highlights })
+    end,
     keys = {
       { ']h', function() require('notebook-navigator').move_cell('d') end, desc = 'Next cell' },
       { '[h', function() require('notebook-navigator').move_cell('u') end, desc = 'Previous cell' },
