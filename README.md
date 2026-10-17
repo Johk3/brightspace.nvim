@@ -98,6 +98,8 @@ uv venv "$notebook_env"
 uv pip install --python "$notebook_env/bin/python" \
   pynvim jupytext jupyter-client ipykernel nbformat pillow \
   numpy matplotlib control ipympl pylatexenc
+install -m 755 scripts/latex2text-notebook "$notebook_env/bin/latex2text-notebook"
+install -m 644 scripts/latex2text-notebook.py "$notebook_env/bin/latex2text-notebook.py"
 "$notebook_env/bin/python" -m ipykernel install --user --name brightspace-python --display-name 'Brightspace Python'
 python3 - <<'PYKERNEL'
 import json

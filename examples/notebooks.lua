@@ -92,7 +92,7 @@ return {
     dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons', '3rd/image.nvim' },
     opts = {
       file_types = { 'markdown' },
-      latex = { converter = { env .. 'latex2text' } },
+      latex = { converter = { env .. 'latex2text-notebook', env .. 'latex2text' } },
     },
     keys = {
       { '<leader>nr', function() run_cell(false) end, desc = 'Notebook: run cell' },
