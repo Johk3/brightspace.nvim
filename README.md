@@ -96,7 +96,7 @@ To install this optional Python setup with `uv`:
 ```sh
 notebook_env="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/notebook-venv"
 uv venv "$notebook_env"
-uv pip install --python "$notebook_env/bin/python" pynvim jupytext jupyter-client ipykernel nbformat pillow
+uv pip install --python "$notebook_env/bin/python" pynvim jupytext jupyter-client ipykernel nbformat pillow ipympl
 "$notebook_env/bin/python" -m ipykernel install --user --name brightspace-python --display-name 'Brightspace Python'
 python3 - <<'PYKERNEL'
 import json
@@ -116,8 +116,9 @@ NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
 `require "nvchad.options"` in their options file. The example sets the Python
 provider to this environment; keep an existing provider if it already contains
 the required packages. Course-specific packages can be installed with
-`uv pip install --python "$notebook_env/bin/python" <package>`. NumPy and Matplotlib
-are installed in the current notebook environment.
+`uv pip install --python "$notebook_env/bin/python" <package>`. NumPy, Matplotlib,
+and ipympl are installed in the current notebook environment; ipympl enables
+notebooks that use `%matplotlib widget`.
 
 | Key | Action |
 | --- | --- |
