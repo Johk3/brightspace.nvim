@@ -4,6 +4,18 @@ local SERVICE = "brightspace.nvim"
 local FIELDS = { "netid", "password" }
 
 local runner
+local operations = {}
+local busy = false
+local function enqueue(operation)
+  operations[#operations + 1] = operation
+  local function next_operation()
+    local work = table.remove(operations, 1)
+    if not work then busy = false; return end
+    busy = true
+    work(next_operation)
+  end
+  if not busy then next_operation() end
+end
 
 --- Default runner: run `cmd` with optional stdin; cb(code, stdout, stderr).
 --- Callback runs in a luv fast context.
@@ -50,6 +62,7 @@ end
 ---@param password string
 ---@param cb fun(err:string|nil)
 function M.store(netid, password, cb)
+  enqueue(function(next_operation)
   local values = { netid = netid, password = password }
   each_field(function(field, done)
     run({
@@ -58,7 +71,8 @@ function M.store(netid, password, cb)
     }, values[field], function(code, _, stderr)
       done(code ~= 0 and ("secret-tool store failed: " .. (stderr or "")) or nil)
     end)
-  end, cb)
+  end, function(err) next_operation(); cb(err) end)
+  end)
 end
 
 ---@param cb fun(err:string|nil, creds:{netid:string,password:string}|nil)
@@ -89,12 +103,14 @@ end
 
 ---@param cb fun(err:string|nil)
 function M.clear(cb)
+  enqueue(function(next_operation)
   each_field(function(field, done)
     run({ "secret-tool", "clear", "service", SERVICE, "field", field }, nil, function(code, _, stderr)
       -- exit 1 means nothing to clear
       done((code ~= 0 and not (code == 1 and (stderr or "") == "")) and ("secret-tool clear failed: " .. (stderr or "")) or nil)
     end)
-  end, cb)
+  end, function(err) next_operation(); cb(err) end)
+  end)
 end
 
 return M

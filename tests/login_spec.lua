@@ -107,6 +107,8 @@ describe("login.run", function()
       ["GET " .. WHOAMI] = { status = 200, headers = {}, body = "{}", url = WHOAMI },
     })
     assert.is_nil((run()))
+    assert.equals(1, count("POST " .. ENGINE))
+    assert.equals(1, count("POST " .. SAML_LOGIN))
     for _, c in ipairs(calls) do
       if c.key == "POST " .. ENGINE then
         assert.equals("ZmFrZS1yZXNwb25zZS0x", c.req.form.SAMLResponse)
@@ -129,6 +131,32 @@ describe("login.run", function()
     assert.is_nil((run()))
     assert.equals("https://login.tudelft.nl/go?a=1&SAMLRequest=x+y", calls[2].req.url)
     assert.is_nil(calls[2].req.form)
+  end)
+
+  it("never puts password inputs in a GET query", function()
+    local response=page(IDP, "idp_login")
+    response.body=response.body:gsub('[Mm][Ee][Tt][Hh][Oo][Dd]="post"','method="get"')
+    use({
+      ["GET " .. BS .. "/d2l/login"] = response,
+      ["POST " .. IDP] = page(BS .. "/d2l/home", "home"),
+      ["GET " .. WHOAMI] = {status=200,body="{}",url=WHOAMI},
+    })
+    assert.is_nil((run()))
+    assert.equals(1,count("POST " .. IDP))
+    for _,call in ipairs(calls) do assert.is_nil(call.req.url:find("hunter2",1,true)) end
+  end)
+
+  it("follows the same-site JavaScript handoff before checking whoami", function()
+    local target = BS .. "/d2l/lp/auth/login/ProcessLogin?token=synthetic"
+    use({
+      ["GET " .. BS .. "/d2l/login"] = {status=200,headers={},url=BS.."/d2l/shibbolethSSO/lelogin.d2l",
+        body='<script>window.location = "'..target..'";</script>'},
+      ["GET " .. BS .. "/d2l/lp/auth/login/ProcessLogin"] = page(BS.."/d2l/home","home"),
+      ["GET " .. WHOAMI] = {status=200,headers={},body="{}",url=WHOAMI},
+    })
+    assert.is_nil((run()))
+    assert.equals(target,calls[2].req.url)
+    assert.equals(WHOAMI,calls[3].req.url)
   end)
 
   it("reports a transport error on the first request once", function()
@@ -226,6 +254,17 @@ describe("login.run", function()
     err = run()
     assert.is_truthy(err:find("^unexpected: "))
     assert.is_nil(err:find("hunter2", 1, true))
+  end)
+
+  it("cancels in-flight login without posting more forms", function()
+    local pending, requests, err = nil, 0, nil
+    http.set_transport(function(_, cb) requests=requests+1; pending=cb end)
+    login.run({netid="jdoe",password="hunter2"}, function(e) err=e end)
+    vim.wait(1000, function() return pending~=nil end)
+    login.cancel()
+    pending(nil,page(IDP,"idp_login"))
+    assert.equals("cancelled",err)
+    assert.equals(1,requests)
   end)
 
   it("wipes the cookie jar first", function()

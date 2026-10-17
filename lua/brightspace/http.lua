@@ -1,6 +1,26 @@
 local M = {}
 
 local transport
+local active = {}
+local cancellation_waiters = {}
+local generation = 0
+
+local function drained()
+  if next(active) then return end
+  local callbacks = cancellation_waiters
+  cancellation_waiters = {}
+  for _, cb in ipairs(callbacks) do cb() end
+end
+
+function M.cancel_all(cb)
+  generation = generation + 1
+  cancellation_waiters[#cancellation_waiters + 1] = cb or function() end
+  for request in pairs(active) do
+    request.cancelled = true
+    if request.process then request.process:kill(15) end
+  end
+  drained()
+end
 
 --- Replace the transport (used by tests). Pass nil to restore curl.
 ---@param fn function|nil
@@ -76,17 +96,19 @@ local function ensure_jar(jar)
 end
 
 local curl_request
-function curl_request(req, cb)
+function curl_request(req, cb, token)
+  token = token or generation
+  if token ~= generation then return cb("cancelled") end
   if vim.in_fast_event() then
     return vim.schedule(function()
-      curl_request(req, cb)
+      curl_request(req, cb, token)
     end)
   end
   local jar = require("brightspace.paths").cookie_jar()
   ensure_jar(jar)
   local hdr_file = vim.fn.tempname()
   local cmd = {
-    "curl", "-sS", "--compressed", "--connect-timeout", "15",
+    "curl", "-sS", "--compressed", "--connect-timeout", "15", "--max-time", "120",
     "-b", jar, "-c", jar, "-D", hdr_file,
     "-w", "\n%{url_effective}",
   }
@@ -115,10 +137,19 @@ function curl_request(req, cb)
   end
   vim.list_extend(cmd, { "--", req.url })
 
+  local request = {}
+  active[request] = true
   local ok, spawn_err = pcall(vim.system, cmd, { stdin = stdin, text = false }, function(out)
+    active[request] = nil
     local raw = read_file(hdr_file)
     vim.uv.fs_unlink(hdr_file)
     vim.uv.fs_chmod(jar, 384)
+    if request.cancelled then
+      if req.output then vim.uv.fs_unlink(req.output) end
+      cb("cancelled")
+      return drained()
+    end
+    drained()
     if out.code ~= 0 then
       local msg = out.stderr and #out.stderr > 0 and out.stderr or ("curl exited with " .. out.code)
       return cb((msg:gsub("%s+$", "")), nil)
@@ -132,7 +163,10 @@ function curl_request(req, cb)
     local status, headers, location = M._parse_headers(raw)
     cb(nil, { status = status, headers = headers, location = location, body = body, url = url })
   end)
+  if ok then request.process = spawn_err end
   if not ok then
+    active[request] = nil
+    drained()
     vim.uv.fs_unlink(hdr_file)
     cb("failed to run curl: " .. tostring(spawn_err), nil)
   end

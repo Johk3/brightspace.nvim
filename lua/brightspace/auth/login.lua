@@ -2,6 +2,12 @@ local http = require("brightspace.http")
 local forms = require("brightspace.auth.forms")
 
 local M = {}
+local generation = 0
+
+-- Prevent further SAML submissions when a workspace logs out mid-login.
+function M.cancel()
+  generation = generation + 1
+end
 
 local MAX_HOPS = 15
 local WHOAMI_PATH = "/d2l/api/lp/1.0/users/whoami"
@@ -36,6 +42,7 @@ function M.run(creds, cb)
       M.run(creds, cb)
     end)
   end
+  local token = generation
   local base = require("brightspace.config").get().base_url:gsub("/+$", "")
   local bs_host = host_of(base)
   local jar = require("brightspace.paths").cookie_jar()
@@ -75,6 +82,7 @@ function M.run(creds, cb)
     hops = hops + 1
     req.follow = true
     http.request(req, function(err, res)
+      if token ~= generation then return finish("cancelled") end
       if err then
         return finish("unexpected: " .. scrub(err))
       end
@@ -84,6 +92,7 @@ function M.run(creds, cb)
 
   local function check_whoami()
     http.request({ method = "GET", url = base .. WHOAMI_PATH, follow = false }, function(err, res)
+      if token ~= generation then return finish("cancelled") end
       if err then
         return finish("unexpected: " .. scrub(err))
       end
@@ -121,7 +130,7 @@ function M.run(creds, cb)
       local form = copy(pw.inputs)
       form.username = creds.netid
       form.password = creds.password
-      return submit(pw, form, step)
+      return send({ method = "POST", url = pw.action, form = form }, step)
     end
     local saml = forms.find(list, function(f)
       return f.inputs.SAMLResponse ~= nil or f.inputs.SAMLRequest ~= nil
@@ -130,6 +139,20 @@ function M.run(creds, cb)
       return submit(saml, copy(saml.inputs), step)
     end
     if host_of(res.url) == bs_host and res.status == 200 then
+      -- TU Delft's Shibboleth bridge completes login with a literal JS redirect.
+      -- Parse that one value; never execute page scripts or leave the origin.
+      local body = res.body or ""
+      local redirect = body:match('window%.location%s*=%s*"([^"]+)"')
+        or body:match("window%.location%s*=%s*'([^']+)'")
+      if redirect then
+        if redirect:sub(1, 1) == "/" and redirect:sub(1, 2) ~= "//" then
+          redirect = base .. redirect
+        end
+        if redirect:sub(1, #base + 1) ~= base .. "/" or redirect:find("[%c\\]") then
+          return finish("unexpected: unsafe login redirect")
+        end
+        return send({ method = "GET", url = redirect }, step)
+      end
       return check_whoami()
     end
     if host_of(res.url) == CONSENT_HOST and #list > 0 then
@@ -139,6 +162,7 @@ function M.run(creds, cb)
   end
 
   local function start()
+    if token ~= generation then return finish("cancelled") end
     send({ method = "GET", url = base .. LOGIN_PATH }, step)
   end
 
