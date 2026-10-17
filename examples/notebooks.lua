@@ -2,21 +2,22 @@
 local env = vim.fn.stdpath('data') .. '/notebook-venv/bin/'
 
 local function run_cell(advance)
-  local navigator = require('notebook-navigator')
-  local cell = navigator.miniai_spec('i')
-  if cell.to.line < cell.from.line then return end
-  local marker = cell.from.line > 1
-    and vim.api.nvim_buf_get_lines(0, cell.from.line - 2, cell.from.line - 1, false)[1] or ''
-  if marker:find('[markdown]', 1, true) or marker:find('[raw]', 1, true)
-    or (cell.from.line == 1 and vim.api.nvim_buf_get_name(0):match('%.ipynb$')) then
-    if advance then navigator.move_cell('d') end
-    return
+  require('quarto.runner').run_cell()
+  if advance then vim.schedule(function() vim.fn.search('^```{', 'W') end) end
+end
+
+local function move_cell(direction)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  if direction == 'next' then
+    for line = row + 1, #lines do
+      if lines[line]:match('^```%b{}') then vim.api.nvim_win_set_cursor(0, { line, 0 }); return end
+    end
+  else
+    for line = row - 1, 1, -1 do
+      if lines[line]:match('^```%b{}') then vim.api.nvim_win_set_cursor(0, { line, 0 }); return end
+    end
   end
-  local last = vim.api.nvim_buf_get_lines(0, cell.to.line - 1, cell.to.line, false)[1] or ''
-  -- Use exact columns: the standard adapter includes the next cell marker,
-  -- which can prevent Molten from matching saved notebook cells on export.
-  vim.fn.MoltenEvaluateRange(cell.from.line, cell.to.line, 1, #last + 1)
-  if advance then navigator.move_cell('d') end
 end
 
 return {
@@ -25,11 +26,37 @@ return {
     lazy = false, -- register BufReadCmd before the first notebook opens
     opts = {
       jupytext = env .. 'jupytext',
-      format = 'py:percent',
-      filetype = 'python',
+      format = 'qmd',
+      filetype = 'quarto',
       update = true, -- preserve existing outputs and metadata on save
       async_write = false, -- finish conversion before Molten exports outputs
     },
+  },
+  {
+    'quarto-dev/quarto-nvim',
+    ft = 'quarto',
+    dependencies = { 'jmbuhr/otter.nvim', 'nvim-treesitter/nvim-treesitter' },
+    keys = {
+      { '<leader>nr', function() run_cell(false) end, desc = 'Notebook: run cell' },
+      { '<leader>nn', function() run_cell(true) end, desc = 'Notebook: run and advance' },
+      { ']h', function() move_cell('next') end, desc = 'Next cell' },
+      { '[h', function() move_cell('prev') end, desc = 'Previous cell' },
+    },
+    opts = {
+      codeRunner = { enabled = true, default_method = 'molten' },
+      lspFeatures = {
+        enabled = true,
+        languages = { 'python' },
+        completion = { enabled = false },
+        diagnostics = { enabled = false },
+      },
+    },
+  },
+  {
+    'MeanderingProgrammer/render-markdown.nvim',
+    ft = { 'markdown', 'quarto' },
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' },
+    opts = { file_types = { 'markdown', 'quarto' } },
   },
   {
     'benlubas/molten-nvim',
@@ -44,6 +71,15 @@ return {
     config = function()
       -- Some distributions disable the built-in remote plugin loader.
       vim.cmd('runtime plugin/rplugin.vim')
+      local function highlights()
+        vim.api.nvim_set_hl(0, 'MoltenCell', { link = 'Visual' })
+        vim.api.nvim_set_hl(0, 'MoltenVirtualText', { link = 'DiagnosticInfo' })
+        vim.api.nvim_set_hl(0, 'MoltenOutputBorderSuccess', { link = 'DiagnosticOk' })
+        vim.api.nvim_set_hl(0, 'MoltenOutputBorderFail', { link = 'DiagnosticError' })
+      end
+      highlights()
+      local colors = vim.api.nvim_create_augroup('BrightspaceNotebookHighlights', { clear = true })
+      vim.api.nvim_create_autocmd('ColorScheme', { group = colors, callback = highlights })
       local group = vim.api.nvim_create_augroup('NotebookOutputs', { clear = true })
       vim.api.nvim_create_autocmd('BufWritePost', {
         group = group,
@@ -64,34 +100,6 @@ return {
       { '<leader>nx', '<cmd>MoltenInterrupt<cr>', desc = 'Notebook: interrupt' },
       { '<leader>nq', '<cmd>MoltenDeinit<cr>', desc = 'Notebook: stop kernel' },
       { '<leader>np', '<cmd>MoltenImagePopup<cr>', desc = 'Notebook: open plot' },
-    },
-  },
-  {
-    'GCBallesteros/NotebookNavigator.nvim',
-    ft = 'python',
-    opts = {
-      repl_provider = 'molten',
-      syntax_highlight = true,
-      cell_highlight_group = 'BrightspaceNotebookCell',
-    },
-    config = function(_, opts)
-      require('notebook-navigator').setup(opts)
-      local function highlights()
-        vim.api.nvim_set_hl(0, 'BrightspaceNotebookCell', { link = 'DiffAdd', bold = true })
-        vim.api.nvim_set_hl(0, 'MoltenCell', { link = 'Visual' })
-        vim.api.nvim_set_hl(0, 'MoltenVirtualText', { link = 'DiagnosticInfo' })
-        vim.api.nvim_set_hl(0, 'MoltenOutputBorderSuccess', { link = 'DiagnosticOk' })
-        vim.api.nvim_set_hl(0, 'MoltenOutputBorderFail', { link = 'DiagnosticError' })
-      end
-      highlights()
-      local group = vim.api.nvim_create_augroup('BrightspaceNotebookHighlights', { clear = true })
-      vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = highlights })
-    end,
-    keys = {
-      { ']h', function() require('notebook-navigator').move_cell('d') end, desc = 'Next cell' },
-      { '[h', function() require('notebook-navigator').move_cell('u') end, desc = 'Previous cell' },
-      { '<leader>nr', function() run_cell(false) end, desc = 'Notebook: run cell' },
-      { '<leader>nn', function() run_cell(true) end, desc = 'Notebook: run and advance' },
     },
   },
   {

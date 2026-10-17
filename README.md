@@ -81,11 +81,15 @@ Downloads with a notebook filename, URL, or notebook MIME type are recognized.
 
 Notebook support is optional: without a notebook editor plugin, Neovim shows the
 original JSON. The [example lazy.nvim configuration](examples/notebooks.lua)
-uses [Jupytext](https://github.com/goerz/jupytext.nvim) to edit Python cells with
-`# %%` separators, [Molten](https://github.com/benlubas/molten-nvim) to run a Jupyter
-kernel, and [NotebookNavigator](https://github.com/GCBallesteros/NotebookNavigator.nvim)
-to navigate and execute cells. Markdown cells appear as comments. Saving writes
-an `.ipynb` file with metadata and outputs, suitable for opening in Jupyter.
+uses [Jupytext](https://github.com/goerz/jupytext.nvim) to edit notebooks as
+[Quarto Markdown](https://quarto.org/docs/computations/python.html),
+[render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)
+to display formatted prose, and [quarto-nvim](https://github.com/quarto-dev/quarto-nvim)
+with [Molten](https://github.com/benlubas/molten-nvim) to run code cells and show
+their output inline. Each notebook cell appears as a Markdown section or a fenced
+code block. Saving writes the `.ipynb` file with its metadata and outputs, ready
+to open in Jupyter. Install the Quarto CLI before opening notebooks; it is used
+by Jupytext to convert between `.ipynb` and `.qmd`.
 
 To install this optional Python setup with `uv`:
 
@@ -105,8 +109,9 @@ PYKERNEL
 cp examples/notebooks.lua ~/.config/nvim/lua/plugins/notebooks.lua
 ```
 
-Install the plugins with your lazy.nvim configuration, then run
-`:UpdateRemotePlugins` and `:TSInstall python`. Restart Neovim after installation.
+Install the [Quarto CLI](https://quarto.org/docs/download/) and the plugins with
+your lazy.nvim configuration, then run `:UpdateRemotePlugins` and
+`:TSInstall markdown markdown_inline python`. Restart Neovim after installation.
 NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
 `require "nvchad.options"` in their options file. The example sets the Python
 provider to this environment; keep an existing provider if it already contains
@@ -117,9 +122,9 @@ are installed in the current notebook environment.
 | Key | Action |
 | --- | --- |
 | `<leader>ni` | Choose a kernel; select `brightspace-python` |
-| `<leader>nr` | Run the current cell |
-| `<leader>nn` | Run the current cell and move to the next |
-| `]h`, `[h` | Move between cells |
+| `<leader>nr` | Run the current code cell |
+| `<leader>nn` | Run the current code cell and move to the next |
+| `]h` / `[h` | Move to the next / previous code cell |
 | `<leader>no` | Show cell output |
 | `<leader>nl` | Load previously saved outputs after starting a kernel |
 | `<leader>np` | Open the cell's plot in an external image viewer |
@@ -128,7 +133,8 @@ are installed in the current notebook environment.
 | `:w` | Save the notebook and current kernel outputs |
 
 After choosing a kernel, wait for Molten’s “ready” message before running a cell.
-Cell separators use a clear highlight, the active cell gets a contrasting background, and each cell’s output uses a separate color. Text output appears below its cell; `<leader>no` opens it in a window. Plot cells
+Markdown headings, lists, links, tables, and code blocks render in place. Text
+output appears below its cell; `<leader>no` opens it in a window. Plot cells
 produce notebook images with the configured inline Matplotlib backend; `<leader>np`
 opens the image in your desktop viewer. Restart the kernel after installing packages. Additional Jupyter kernels can be registered
 for course environments. Use the appropriate working directory and keep any
