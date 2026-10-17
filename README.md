@@ -82,21 +82,22 @@ Downloads with a notebook filename, URL, or notebook MIME type are recognized.
 Notebook support is optional: without a notebook editor plugin, Neovim shows the
 original JSON. The [example lazy.nvim configuration](examples/notebooks.lua)
 uses [Jupytext](https://github.com/goerz/jupytext.nvim) to edit notebooks as
-[Quarto Markdown](https://quarto.org/docs/computations/python.html),
+[Markdown](https://jupytext.readthedocs.io/en/latest/formats.html),
 [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)
-to display formatted prose, and [quarto-nvim](https://github.com/quarto-dev/quarto-nvim)
-with [Molten](https://github.com/benlubas/molten-nvim) to run code cells and show
-their output inline. Each notebook cell appears as a Markdown section or a fenced
-code block. Saving writes the `.ipynb` file with its metadata and outputs, ready
-to open in Jupyter. Install the Quarto CLI before opening notebooks; it is used
-by Jupytext to convert between `.ipynb` and `.qmd`.
+to render prose and LaTeX equations, [image.nvim](https://github.com/3rd/image.nvim)
+to show notebook images, and [Molten](https://github.com/benlubas/molten-nvim) to
+run Python code cells and display their outputs. Markdown cells render as prose;
+code cells appear as fenced Python blocks. Saving writes the `.ipynb` with its
+metadata and outputs, ready to open in Jupyter.
 
 To install this optional Python setup with `uv`:
 
 ```sh
 notebook_env="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/notebook-venv"
 uv venv "$notebook_env"
-uv pip install --python "$notebook_env/bin/python" pynvim jupytext jupyter-client ipykernel nbformat pillow ipympl
+uv pip install --python "$notebook_env/bin/python" \
+  pynvim jupytext jupyter-client ipykernel nbformat pillow \
+  numpy matplotlib control ipympl pylatexenc
 "$notebook_env/bin/python" -m ipykernel install --user --name brightspace-python --display-name 'Brightspace Python'
 python3 - <<'PYKERNEL'
 import json
@@ -109,16 +110,20 @@ PYKERNEL
 cp examples/notebooks.lua ~/.config/nvim/lua/plugins/notebooks.lua
 ```
 
-Install the [Quarto CLI](https://quarto.org/docs/download/) and the plugins with
-your lazy.nvim configuration, then run `:UpdateRemotePlugins` and
-`:TSInstall markdown markdown_inline python`. Restart Neovim after installation.
+Install the plugins with your lazy.nvim configuration, then run
+`:UpdateRemotePlugins` and `:TSInstall markdown markdown_inline latex python`.
+Restart Neovim after installation. Inline image rendering uses Ghostty's Kitty
+graphics support and the ImageMagick CLI (`convert`); install ImageMagick if
+that command is missing. Use `<leader>np` to open a plot in your desktop image
+viewer if inline images are unavailable.
 NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
 `require "nvchad.options"` in their options file. The example sets the Python
 provider to this environment; keep an existing provider if it already contains
 the required packages. Course-specific packages can be installed with
 `uv pip install --python "$notebook_env/bin/python" <package>`. NumPy, Matplotlib,
-and ipympl are installed in the current notebook environment; ipympl enables
-notebooks that use `%matplotlib widget`.
+ipympl, and pylatexenc are installed in the current notebook environment. ipympl
+enables `%matplotlib widget`; pylatexenc converts notebook equations to readable
+Unicode math in Neovim.
 
 | Key | Action |
 | --- | --- |
@@ -134,10 +139,10 @@ notebooks that use `%matplotlib widget`.
 | `:w` | Save the notebook and current kernel outputs |
 
 After choosing a kernel, wait for Molten’s “ready” message before running a cell.
-Markdown headings, lists, links, tables, and code blocks render in place. Text
-output appears below its cell; `<leader>no` opens it in a window. Plot cells
-produce notebook images with the configured inline Matplotlib backend; `<leader>np`
-opens the image in your desktop viewer. Restart the kernel after installing packages. Additional Jupyter kernels can be registered
+Markdown headings, lists, links, tables, equations, and code blocks render in
+place. Notebook PNG attachments and plot outputs display inline in Ghostty.
+Text output appears below its cell; `<leader>no` opens it in a window.
+Additional Jupyter kernels can be registered
 for course environments. Use the appropriate working directory and keep any
 required datasets alongside your local work. Brightspace does not upload or
 submit edited notebooks.
