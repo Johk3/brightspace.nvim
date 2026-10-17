@@ -40,6 +40,13 @@ local function viewer(path,item,cb)
   args[#args+1]=path
   launch(args,item,cb)
 end
+local function notebook(source,item,filename,cb)
+  local notebooks=require('brightspace.notebook')
+  local path,err=notebooks.keep(item,source,filename)
+  if not path then return warn(err) end
+  notebooks.open(path)
+  mark(item,cb)
+end
 function M.item(item,cb)
   if vim.in_fast_event() then return vim.schedule(function() M.item(item,cb) end) end
   if item.kind=='module' then return end
@@ -56,6 +63,12 @@ function M.item(item,cb)
     if not url then return warn('unsupported link') end
     return launch({'xdg-open',url},item,cb)
   end
+  local notebooks=require('brightspace.notebook')
+  local working_copy=notebooks.find(item)
+  if working_copy then
+    notebooks.open(working_copy)
+    return mark(item,cb)
+  end
   local paths=require('brightspace.paths')
   local dir=paths.cache()..'/files/'..tostring(item.course_id):gsub('[^%w_-]','_')
   vim.fn.mkdir(dir,'p','0700')
@@ -63,6 +76,7 @@ function M.item(item,cb)
   local prefix=dir..'/'..name
   for _,path in ipairs(vim.fn.glob(prefix..'.*',false,true)) do
     if not path:match('%.part$') then
+      if path:match('%.ipynb$') then return notebook(path,item,nil,cb) end
       if path:match('%.html?$') then
         return float(item,table.concat(vim.fn.readfile(path),'\n'),cb)
       end
@@ -91,6 +105,11 @@ function M.item(item,cb)
     vim.schedule(function()
       pending[prefix]=nil
       if err then vim.fn.delete(dest); return warn(err) end
+      if notebooks.matches(item,meta) then
+        notebook(dest,item,meta.filename,cb)
+        vim.fn.delete(dest)
+        return
+      end
       local ext=meta.filename and meta.filename:match('%.([%w]+)$')
       local mime=(meta.content_type or ''):match('^[^;]+')
       ext=ext or ({['application/pdf']='pdf',['text/plain']='txt',['image/png']='png',['image/jpeg']='jpg'})[mime] or 'bin'

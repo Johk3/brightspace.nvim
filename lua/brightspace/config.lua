@@ -3,6 +3,7 @@ local M = {}
 local defaults = {
   base_url = "https://brightspace.tudelft.nl",
   viewer = "xdg-open", -- string or list of command parts
+  notebook_dir = false, -- defaults to stdpath("data")/brightspace/notebooks
   keymap = "<leader>bs", -- false disables the mapping
   cache_ttl = 300, -- seconds
   keepalive = 600, -- seconds

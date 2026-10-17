@@ -1,6 +1,6 @@
 # brightspace.nvim
 
-Browse TU Delft Brightspace from Neovim. Open a workspace with courses, a content tree, upcoming deadlines, and new announcements or material. PDFs open in your desktop viewer; announcements and HTML pages stay in Neovim.
+Browse TU Delft Brightspace from Neovim. Open a workspace with courses, a content tree, upcoming deadlines, and new announcements or material. PDFs open in your desktop viewer; announcements and HTML pages stay in Neovim. Jupyter notebooks open as persistent local working copies in separate tabs.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ The plugin makes no network requests until you open its workspace. The first ope
 - `:Brightspace` or `:Brightspace open`: open or focus the workspace.
 - `:Brightspace refresh`: refresh data from Brightspace.
 - `:Brightspace search`: search courses and loaded content.
-- `:Brightspace logout`: forget credentials and cookies, close the workspace, and remove cached course data and downloaded files.
+- `:Brightspace logout`: forget credentials and cookies, close the workspace, and remove cached course data and downloaded files. Local notebook working copies remain.
 
 Inside the workspace:
 
@@ -59,6 +59,7 @@ Deadlines cover current courses and the next 30 days. Red means less than 24 hou
 require("brightspace").setup({
   base_url = "https://brightspace.tudelft.nl",
   viewer = "xdg-open", -- or { "evince" }
+  notebook_dir = false, -- default: stdpath("data") .. "/brightspace/notebooks"
   keymap = "<leader>bs", -- false disables this mapping
   cache_ttl = 300,       -- refresh interval and cache lifetime, seconds
   keepalive = 600,       -- session check interval, seconds; 0 disables it
@@ -68,6 +69,62 @@ require("brightspace").setup({
 
 Course access dates determine whether a course is current when available. Otherwise the plugin uses academic-year and quarter labels such as `2026/27 Q1`. Date-free course labels use approximate academic-quarter boundaries; `Q` always exposes older or unclassified offerings. Programme/community units with a non-course org-unit type are excluded.
 
+## Jupyter notebooks
+
+Press Enter on a `.ipynb` file in the content tree. Brightspace downloads it once to
+`stdpath("data")/brightspace/notebooks/<course-id>/<topic-id>/<filename>.ipynb`
+and opens it in an editable Neovim tab. Set `notebook_dir` to use another root.
+Reopening focuses the existing buffer, including unsaved edits. Refreshes, remote
+file revisions, and logout never replace or delete your working copy. To start
+again from a newer course version, move your working copy elsewhere first.
+Downloads with a notebook filename, URL, or notebook MIME type are recognized.
+
+Notebook support is optional: without a notebook editor plugin, Neovim shows the
+original JSON. The [example lazy.nvim configuration](examples/notebooks.lua)
+uses [Jupytext](https://github.com/goerz/jupytext.nvim) to edit Python cells with
+`# %%` separators, [Molten](https://github.com/benlubas/molten-nvim) to run a Jupyter
+kernel, and [NotebookNavigator](https://github.com/GCBallesteros/NotebookNavigator.nvim)
+to navigate and execute cells. Markdown cells appear as comments. Saving writes
+an `.ipynb` file with metadata and outputs, suitable for opening in Jupyter.
+
+To install this optional Python setup with `uv`:
+
+```sh
+notebook_env="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/notebook-venv"
+uv venv "$notebook_env"
+uv pip install --python "$notebook_env/bin/python" pynvim jupytext jupyter-client ipykernel nbformat pillow
+"$notebook_env/bin/python" -m ipykernel install --user --name brightspace-python --display-name 'Brightspace Python'
+cp examples/notebooks.lua ~/.config/nvim/lua/plugins/notebooks.lua
+```
+
+Install the plugins with your lazy.nvim configuration, then run
+`:UpdateRemotePlugins` and `:TSInstall python`. Restart Neovim after installation.
+NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
+`require "nvchad.options"` in their options file. The example sets the Python
+provider to this environment; keep an existing provider if it already contains
+the required packages. Course-specific packages can be installed with
+`uv pip install --python "$notebook_env/bin/python" <package>`.
+
+| Key | Action |
+| --- | --- |
+| `<leader>ni` | Choose a kernel; select `brightspace-python` |
+| `<leader>nr` | Run the current cell |
+| `<leader>nn` | Run the current cell and move to the next |
+| `]h`, `[h` | Move between cells |
+| `<leader>no` | Show cell output |
+| `<leader>nl` | Load previously saved outputs after starting a kernel |
+| `<leader>np` | Open the cell's plot in an external image viewer |
+| `<leader>nx` | Interrupt execution |
+| `<leader>nq` | Stop the kernel |
+| `:w` | Save the notebook and current kernel outputs |
+
+After choosing a kernel, wait for Molten’s “ready” message before running a cell.
+Kernels start only when requested. Text output appears inside Neovim; this example
+uses an external viewer for plots. Additional Jupyter kernels can be registered
+for course environments. Use the appropriate working directory and keep any
+required datasets alongside your local work. Brightspace does not upload or
+submit edited notebooks.
+
 ## Local data and privacy
 
 Credentials are stored in the desktop keyring under `service=brightspace.nvim`. Passwords travel to subprocesses on standard input. Session cookies use a private file with mode `0600`.
@@ -75,8 +132,9 @@ Credentials are stored in the desktop keyring under `service=brightspace.nvim`. 
 - Cookies: `stdpath("state")/brightspace/cookies.txt`
 - Course data and file downloads: `stdpath("cache")/brightspace/`
 - Seen state: `stdpath("data")/brightspace/seen.json`
+- Editable notebooks: `stdpath("data")/brightspace/notebooks/` (or `notebook_dir`)
 
-Cached content is private local data. Logout clears cookies, credentials, JSON caches, and downloaded files; seen markers remain. Environment variables `BRIGHTSPACE_STATE_DIR`, `BRIGHTSPACE_CACHE_DIR`, and `BRIGHTSPACE_DATA_DIR` can override these directories.
+Cached content is private local data. Logout clears cookies, credentials, JSON caches, and cached downloads; seen markers and notebook working copies remain. Environment variables `BRIGHTSPACE_STATE_DIR`, `BRIGHTSPACE_CACHE_DIR`, and `BRIGHTSPACE_DATA_DIR` can override these directories.
 
 Closing the workspace stops polling and session keepalive. Cached courses remain available when offline. Some course tools may be unavailable to your account; the workspace reports partial failures and retains cached data.
 
