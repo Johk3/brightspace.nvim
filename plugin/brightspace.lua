@@ -4,12 +4,7 @@ end
 vim.g.loaded_brightspace = true
 
 vim.api.nvim_create_user_command("Brightspace", function(args)
-  local ok, commands = pcall(require, "brightspace.commands")
-  if not ok then
-    vim.notify("brightspace: commands unavailable", vim.log.levels.ERROR)
-    return
-  end
-  commands.run(args.args)
+  require("brightspace.commands").run(args.args)
 end, {
   nargs = "?",
   complete = function()
