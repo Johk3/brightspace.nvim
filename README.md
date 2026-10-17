@@ -140,7 +140,9 @@ Unicode math in Neovim.
 
 After choosing a kernel, wait for Molten’s “ready” message before running a cell.
 Markdown headings, lists, links, tables, equations, and code blocks render in
-place. Notebook PNG attachments and plot outputs display inline in Ghostty.
+place. Bare display environments such as `\begin{cases}...\end{cases}` are
+automatically wrapped for Markdown rendering when a notebook opens. Notebook PNG
+attachments and plot outputs display inline in Ghostty.
 Text output appears below its cell; `<leader>no` opens it in a window.
 Additional Jupyter kernels can be registered
 for course environments. Use the appropriate working directory and keep any

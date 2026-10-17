@@ -177,6 +177,9 @@ return {
         callback = function(args)
           if vim.api.nvim_buf_get_name(args.buf):match('%.ipynb$') then
             extract_notebook_attachments(args.buf)
+            vim.schedule(function()
+              require('brightspace.notebook_math').normalize_buffer(args.buf)
+            end)
           end
         end,
       })
