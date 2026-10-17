@@ -94,6 +94,14 @@ notebook_env="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/notebook-venv"
 uv venv "$notebook_env"
 uv pip install --python "$notebook_env/bin/python" pynvim jupytext jupyter-client ipykernel nbformat pillow
 "$notebook_env/bin/python" -m ipykernel install --user --name brightspace-python --display-name 'Brightspace Python'
+python3 - <<'PYKERNEL'
+import json
+from pathlib import Path
+p = Path.home() / '.local/share/jupyter/kernels/brightspace-python/kernel.json'
+spec = json.loads(p.read_text())
+spec.setdefault('env', {})['MPLBACKEND'] = 'module://matplotlib_inline.backend_inline'
+p.write_text(json.dumps(spec, indent=2) + '\n')
+PYKERNEL
 cp examples/notebooks.lua ~/.config/nvim/lua/plugins/notebooks.lua
 ```
 
@@ -103,7 +111,8 @@ NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
 `require "nvchad.options"` in their options file. The example sets the Python
 provider to this environment; keep an existing provider if it already contains
 the required packages. Course-specific packages can be installed with
-`uv pip install --python "$notebook_env/bin/python" <package>`.
+`uv pip install --python "$notebook_env/bin/python" <package>`. NumPy and Matplotlib
+are installed in the current notebook environment.
 
 | Key | Action |
 | --- | --- |
@@ -119,8 +128,9 @@ the required packages. Course-specific packages can be installed with
 | `:w` | Save the notebook and current kernel outputs |
 
 After choosing a kernel, wait for Molten’s “ready” message before running a cell.
-Kernels start only when requested. Text output appears inside Neovim; this example
-uses an external viewer for plots. Additional Jupyter kernels can be registered
+Text output appears below the cell; `<leader>no` opens it in a window. Plot cells
+produce notebook images with the configured inline Matplotlib backend; `<leader>np`
+opens the image in your desktop viewer. Restart the kernel after installing packages. Additional Jupyter kernels can be registered
 for course environments. Use the appropriate working directory and keep any
 required datasets alongside your local work. Brightspace does not upload or
 submit edited notebooks.
