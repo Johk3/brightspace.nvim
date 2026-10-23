@@ -44,7 +44,7 @@ Inside the workspace:
 | `o`, `za` | Toggle a module |
 | `Q` | Show or hide older quarters |
 | `R` | Refresh |
-| `/` | Search |
+| `/`, `<leader>/` | Search |
 | `m` | Mark the item as seen |
 | `M` | Mark the selected course as seen |
 | `q` | Close the workspace |

@@ -107,14 +107,17 @@ local function configure(name, win)
   vim.wo[win].foldcolumn = '0'
   vim.wo[win].wrap = false
   vim.wo[win].winfixwidth = name ~= 'content'
+  vim.wo[win].winfixbuf = true
   local pane = {win = win, buf = buf, map = {}}
   active.panes[name] = pane
-  local function map(key, callback) vim.keymap.set('n', key, callback, {buffer = buf, silent = true}) end
+  local function map(key, callback, mode) vim.keymap.set(mode or 'n', key, callback, {buffer = buf, silent = true}) end
   map('<CR>', function() enter(name) end)
   for _, key in ipairs({'o', 'za'}) do map(key, function() enter(name, true) end) end
   map('q', M.close)
   map('R', function() if active.actions.refresh then active.actions.refresh() end end)
-  map('/', function() if active.actions.search then active.actions.search() end end)
+  local function search() if active.actions.search then active.actions.search() end end
+  map('/', search)
+  map('<leader>/', search, {'n', 'x'})
   map('Q', function() active.state.show_all = not active.state.show_all; M.update(active.state) end)
   map('m', function() mark(name, false) end)
   map('M', function() mark(name, true) end)

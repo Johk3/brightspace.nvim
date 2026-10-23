@@ -23,6 +23,7 @@ local function float(item,body,cb)
     row=math.max(0,math.floor((vim.o.lines-height)/2)-1),col=math.max(0,math.floor((vim.o.columns-width)/2)),
     style='minimal',border='rounded',title=' '..(item.title or 'Brightspace'):gsub('[%c]',' ')..' '})
   vim.wo[win].wrap=true
+  vim.wo[win].winfixbuf=true
   for _,key in ipairs({'q','<Esc>'}) do
     vim.keymap.set('n',key,function() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win,true) end end,{buffer=buf})
   end
