@@ -84,9 +84,11 @@ original JSON. The [example lazy.nvim configuration](examples/notebooks.lua)
 uses [Jupytext](https://github.com/goerz/jupytext.nvim) to edit notebooks as
 [Markdown](https://jupytext.readthedocs.io/en/latest/formats.html),
 [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)
-to render prose and LaTeX equations, [image.nvim](https://github.com/3rd/image.nvim)
-to show notebook images, and [Molten](https://github.com/benlubas/molten-nvim) to
-run Python code cells and display their outputs. Markdown cells render as prose;
+to render prose, [snacks.nvim](https://github.com/folke/snacks.nvim) to show
+notebook images and typeset LaTeX equations as images,
+[image.nvim](https://github.com/3rd/image.nvim) to show plot outputs, and
+[Molten](https://github.com/benlubas/molten-nvim) to run Python code cells and
+display their outputs. Markdown cells render as prose;
 code cells appear as fenced Python blocks. Saving writes the `.ipynb` with its
 metadata and outputs, ready to open in Jupyter.
 
@@ -114,9 +116,14 @@ cp examples/notebooks.lua ~/.config/nvim/lua/plugins/notebooks.lua
 
 Install the plugins with your lazy.nvim configuration, then run
 `:UpdateRemotePlugins` and `:TSInstall markdown markdown_inline latex python`.
-Restart Neovim after installation. Inline image rendering uses Ghostty's Kitty
+Restart Neovim after installation. After updating this plugin, rerun the two
+`install` lines and the `cp` command to pick up converter and configuration fixes.
+Inline image rendering uses Ghostty's Kitty
 graphics support and the ImageMagick CLI (`convert`); install ImageMagick if
-that command is missing. Use `<leader>np` to open a plot in your desktop image
+that command is missing. Equations are typeset with `pdflatex` (or `tectonic`)
+and need the `amsmath`, `amssymb` and `mathtools` LaTeX packages; in terminals
+without inline image support they fall back to Unicode text via
+`latex2text-notebook`. Use `<leader>np` to open a plot in your desktop image
 viewer if inline images are unavailable.
 NvChad users must also set `vim.g.loaded_python3_provider = nil` **after**
 `require "nvchad.options"` in their options file. The example sets the Python
