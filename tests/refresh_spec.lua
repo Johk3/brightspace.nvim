@@ -70,4 +70,37 @@ describe('background refresh',function()
     assert.is_nil(store.cache_get('courses'))
     assert.is_false(state.loading)
   end)
+  it('settles jobs whose response cannot be applied or stored',function()
+    api.toc=function(_,cb) cb(nil,{Modules=5}) end
+    local put=store.cache_put
+    store.cache_put=function(name,data) if name:match('^news') then error('disk full') end return put(name,data) end
+    refresh.run(state,function() end)
+    local settled=vim.wait(1000,function() return not state.loading end)
+    store.cache_put=put
+    assert.is_true(settled)
+    assert.is_true(vim.tbl_contains(state.errors,'bad_response'))
+    assert.is_true(vim.tbl_contains(state.errors,'storage_error'))
+  end)
+  it('loads the last course selected while a refresh is running',function()
+    local calls,pending={},nil
+    local past=function(id) return {OrgUnit={Id=id,Type={Id=3},Name='Past (2025/26 Q1)'}} end
+    store.cache_put('courses',{row,past(100002),past(100003)}); refresh.load_cached(state)
+    api.courses=function(cb) pending=cb end
+    api.toc=function(id,cb) calls[#calls+1]=id; cb(nil,{Modules={}}) end
+    refresh.run(state,function() end,{force=true})
+    refresh.select(state,100002,function() end)
+    refresh.select(state,100003,function() end)
+    pending(nil,{row,past(100002),past(100003)})
+    assert.is_true(vim.wait(1000,function() return vim.tbl_contains(calls,100003) end))
+    vim.wait(200)
+    assert.is_false(vim.tbl_contains(calls,100002))
+  end)
+  it('coalesces redraws for a burst of responses',function()
+    local updates=0
+    refresh.run(state,function() updates=updates+1 end); finish()
+    updates=0
+    refresh.run(state,function() updates=updates+1 end); finish()
+    vim.wait(50)
+    assert.is_true(updates<=2,'updates: '..updates)
+  end)
 end)

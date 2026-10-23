@@ -69,6 +69,7 @@ function M.load_cached(state)
 end
 function M.cancel(state)
   state.generation=state.generation+1
+  state.cancels=(state.cancels or 0)+1
   state.loading=false
 end
 local function notify_error(err)
@@ -83,30 +84,40 @@ local function execute(state,on_update,opts)
   local api=require('brightspace.api')
   local ttl=require('brightspace.config').get().cache_ttl
   local function valid() return generation==state.generation end
-  local function update() M.rebuild(state); on_update() end
+  -- Coalesce per-job redraws: a burst of responses rebuilds and redraws once.
+  local dirty=false
+  local function flush() dirty=false; M.rebuild(state); on_update() end
+  local function update()
+    if dirty then return end
+    dirty=true
+    vim.schedule(function() if dirty and valid() then flush() end end)
+  end
   local successes,errors=0,{}
   local function fetch(name,id,cb)
     local key=name..(id and ':'..id or '')
     local cached,age=store.cache_get(key)
-    if not opts.force and cached and age<ttl then
-      apply(state,name,id,cached); successes=successes+1
+    if not opts.force and cached and age<ttl and pcall(apply,state,name,id,cached) then
+      successes=successes+1
       return cb(nil)
+    end
+    local function settle(err,data)
+      if err then return err end
+      if type(data)~='table' or not pcall(apply,state,name,id,data) then return 'bad_response' end
+      successes=successes+1
+      if id and (name=='toc' or name=='news' or name=='overview') then
+        local items = name=='toc' and content.flatten(state.trees[id])
+          or (name=='news' and state.news[id] or (state.info[id] and {state.info[id]} or {}))
+        store.baseline(id..':'..name,items,os.time())
+      end
+      store.cache_put(key,data)
     end
     local function done(err,data)
       vim.schedule(function()
         if not valid() then return end
-        if not err and type(data)~='table' then err='bad_response' end
-        if err then errors[#errors+1]=err
-        else
-          successes=successes+1
-          store.cache_put(key,data)
-          apply(state,name,id,data)
-        end
-        if not err and id and (name=='toc' or name=='news' or name=='overview') then
-          local items = name=='toc' and content.flatten(state.trees[id])
-            or (name=='news' and state.news[id] or (state.info[id] and {state.info[id]} or {}))
-          store.baseline(id..':'..name,items,os.time())
-        end
+        -- A throwing apply or disk write must still settle the job, or loading never ends.
+        local ok,result=pcall(settle,err,data)
+        if ok then err=result else err='storage_error' end
+        if err then errors[#errors+1]=err end
         cb(err)
       end)
     end
@@ -122,7 +133,7 @@ local function execute(state,on_update,opts)
     if not valid() then return end
     state.loading=false
     state.errors=errors
-    update()
+    flush()
     if #errors>0 then
       if successes==0 then notify_error(errors[1])
       else vim.notify('Brightspace: some data unavailable ('..table.concat(vim.fn.uniq(vim.fn.sort(vim.deepcopy(errors))),', ')..')',vim.log.levels.WARN) end
@@ -158,7 +169,7 @@ local function execute(state,on_update,opts)
   end
   require('brightspace.auth.session').ensure(function(err)
     if not valid() then return end
-    if err then state.loading=false; notify_error(err); update(); return end
+    if err then state.loading=false; notify_error(err); flush(); return end
     if opts.course_id then return populate() end
     fetch('courses',nil,function(course_err)
       if course_err then return finish() end
@@ -171,10 +182,11 @@ function M.select(state,id,on_update)
   state.selected_id=id
   on_update()
   if state.loading then
-    -- The active refresh owns the queue; enqueue the selected older course after it settles.
-    local generation=state.generation
+    -- The active refresh owns the queue; load the course after it settles unless
+    -- the workspace was cancelled or another course was selected meanwhile.
+    local cancels=state.cancels
     local function later()
-      if state.generation~=generation then return end
+      if state.cancels~=cancels or state.selected_id~=id then return end
       if state.loading then return vim.defer_fn(later,50) end
       execute(state,on_update,{course_id=id})
     end

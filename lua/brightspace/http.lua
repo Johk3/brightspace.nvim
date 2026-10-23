@@ -108,10 +108,16 @@ function curl_request(req, cb, token)
   ensure_jar(jar)
   local hdr_file = vim.fn.tempname()
   local cmd = {
-    "curl", "-sS", "--compressed", "--connect-timeout", "15", "--max-time", "120",
+    "curl", "-sS", "--compressed", "--connect-timeout", "15",
     "-b", jar, "-c", jar, "-D", hdr_file,
     "-w", "\n%{url_effective}",
   }
+  -- Large downloads may legitimately exceed a fixed deadline; abort only stalls.
+  if req.output then
+    vim.list_extend(cmd, { "--speed-limit", "1", "--speed-time", "60" })
+  else
+    vim.list_extend(cmd, { "--max-time", "120" })
+  end
   -- GET is curl's default and a POST body implies POST; forcing -X would be
   -- kept across redirects and break POST->302->GET.
   local method = req.method or "GET"

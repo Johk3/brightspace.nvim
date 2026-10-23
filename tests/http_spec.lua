@@ -170,6 +170,21 @@ describe("http.request against loopback server", function()
     return err, res
   end
 
+  it("downloads to a file without a fixed deadline", function()
+    local argv
+    local system = vim.system
+    vim.system = function(cmd, ...) argv = cmd; return system(cmd, ...) end
+    local dest = root .. "/download"
+    vim.fn.mkdir(root, "p")
+    local err, res = call({ url = url("/get"), output = dest })
+    vim.system = system
+    assert.is_nil(err)
+    assert.equals(200, res.status)
+    assert.same({ "hello" }, vim.fn.readfile(dest))
+    assert.is_nil(vim.tbl_contains(argv, "--max-time") or nil)
+    assert.is_true(vim.tbl_contains(argv, "--speed-time"))
+  end)
+
   it("GET parses status, headers and body", function()
     local err, res = call({ url = url("/get") })
     assert.is_nil(err)

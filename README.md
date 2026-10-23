@@ -170,6 +170,6 @@ Closing the workspace stops polling and session keepalive. Cached courses remain
 make test
 ```
 
-Set `PLENARY_DIR` if Plenary is not installed under `stdpath("data")/lazy/plenary.nvim`. Tests use synthetic course data, fake authentication, temporary directories, and a local HTTP server.
+Set `PLENARY_DIR` if Plenary is not installed under `stdpath("data")/lazy/plenary.nvim`. LaTeX converter tests use the notebook environment's Python, or `BRIGHTSPACE_TEST_PYTHON`, and are skipped when `pylatexenc` is unavailable. Tests use synthetic course data, fake authentication, temporary directories, and a local HTTP server.
 
 API field and route references: [enrollments](https://docs.valence.desire2learn.com/res/enroll.html), [course content](https://docs.valence.desire2learn.com/res/content.html), and [calendar](https://docs.valence.desire2learn.com/res/calendar.html).

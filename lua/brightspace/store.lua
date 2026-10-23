@@ -1,6 +1,8 @@
 local M = {}
 local paths = require('brightspace.paths')
 local seen, baselines = {}, {}
+-- Decoded cache records by file path, so opening and refreshing decode each file once.
+local records = {}
 local function read(path)
   local f = io.open(path, 'rb')
   if not f then return nil end
@@ -19,11 +21,19 @@ local function name_path(name)
   return paths.cache()..'/'..name:gsub('[^%w_-]', '_')..'.json'
 end
 function M.cache_get(name)
-  local record = read(name_path(name))
-  if record and type(record.saved)=='number' then return record.data, math.max(0, os.time()-record.saved) end
+  local path = name_path(name)
+  local record = records[path] or read(path)
+  if record and type(record.saved)=='number' then
+    records[path] = record
+    return record.data, math.max(0, os.time()-record.saved)
+  end
   return nil, math.huge
 end
-function M.cache_put(name, data) write(name_path(name), {saved=os.time(),data=data}) end
+function M.cache_put(name, data)
+  local path, record = name_path(name), {saved=os.time(),data=data}
+  write(path, record)
+  records[path] = record
+end
 function M.seen_load()
   local value = read(paths.data()..'/seen.json') or {}
   seen = type(value.seen)=='table' and value.seen or {}
@@ -46,6 +56,7 @@ function M.baseline(course_id, items, now)
   save()
 end
 function M.clear_cache()
+  records = {}
   for _, file in ipairs(vim.fn.glob(paths.cache()..'/*.json', false, true)) do vim.fn.delete(file) end
   vim.fn.delete(paths.cache()..'/files', 'rf')
 end
